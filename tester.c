@@ -11,6 +11,7 @@ typedef char datablock[DATABLOCK_SIZE];
 #define OFF_CENTER 12
 #define OFF_RIGHT 20
 
+/* bit flags for which button is down */
 #define BUTTON_LEFT (1 << 0)
 #define BUTTON_CENTER (1 << 1)
 #define BUTTON_RIGHT (1 << 2)

@@ -1,0 +1,45 @@
+#+TITLE: Vec Infinity Pedal (USB Protocol)
+#+AUTHOR: Joshua Cearley
+
+* Overview
+Reading from the device is easily done by using =udev=; =/dev/usb/hiddev1= was used when creating this document.
+
+The footpedal does not accept any packets, and transmits 24-byte packets to the computer when a button is pressed or released. Of this packet, only three bytes are important:
+
+| Byte | Purpose            |
+|------+--------------------+
+|    4 | Left button down   |
+|   12 | Center button down |
+|   20 | Right button down  |
+
+By reading 24-byte packets, and querying these three byte offsets, you may determine which buttons the user is currently holding down. Each packet contains the pressure state of each individual button.
+
+* Bugs
+
+On occasion, an "off" packet is not transmitted upon the release of a button. Unplugging and re-pluging the device sometimes fixes this problem.
+
+On other occasion, two "off" packets are sent when the user lets go of a button. This is annoying, but seemingly harmless.
+
+* TODO Reverse Engineering
+
+Log files are inspected using the =hexdump= and =vimdiff= utilities. =hexdump= converts the raw input from USB captures to something humanly legible, and =vimdiff= highlights individual bytes which have changed. Due to the simplicity of the device involved, this is a fairly simple activity to perform by hand.
+
+Capturing packets from the device:
+#+begin_example
+# press the center pedal down
+cat /dev/usb/hiddev1 > center-up.log
+# let go of the center pedal
+#+end_example
+
+Using hexdump to analyze packets:
+#+begin_example
+$ hexdump center-up.log
+0000000 0001 0009 0000 0000 0002 0009 0000 0000
+0000010 0003 0009 0000 0000
+0000018
+#+end_example
+
+Analyzing packet logs:
+#+begin_example
+$ vimdiff <(hexdump center-up.log) <(hexdump center-down.log)
+#+end_example
