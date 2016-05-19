@@ -3,13 +3,13 @@
 #define DEVICEPATH "/dev/usb/hiddev1"
 
 /* size of individual datablocks */
-#define DATABLOCK_SIZE 18
+#define DATABLOCK_SIZE 24
 typedef char datablock[DATABLOCK_SIZE];
 
 /* offsets to bytes we are interested in */
-#define OFF_LEFT 6
-#define OFF_CENTER 14
-#define OFF_RIGHT 22
+#define OFF_LEFT 4
+#define OFF_CENTER 12
+#define OFF_RIGHT 20
 
 #define BUTTON_LEFT (1 << 0)
 #define BUTTON_CENTER (1 << 1)
@@ -17,13 +17,13 @@ typedef char datablock[DATABLOCK_SIZE];
 
 int mask_from_datablock(datablock* dblock) {
   int ret = 0;
-  if (dblock[OFF_LEFT] != 0) {
+  if ((*dblock)[OFF_LEFT] != 0) {
     ret |= BUTTON_LEFT;
   }
-  if (dblock[OFF_CENTER] != 0) {
+  if ((*dblock)[OFF_CENTER] != 0) {
     ret |= BUTTON_CENTER;
   }
-  if (dblock[OFF_RIGHT] != 0) {
+  if ((*dblock)[OFF_RIGHT] != 0) {
     ret |= BUTTON_RIGHT;
   }
   return ret;
