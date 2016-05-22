@@ -1,5 +1,134 @@
+#include <stdlib.h>
+#include <string.h>
 #include <stdio.h>
 
+#include <X11/Xlib.h>
+#include <X11/keysym.h>
+#include <X11/keysymdef.h>
+
+/* X11
+   --- */
+/* Special thanks to Adam for his example code on sending X11 events.
+
+   http://www.doctort.org/adam/nerd-notes/x11-fake-keypress-event.html */
+
+Display* x11_display;
+
+/* enables the X module */
+void x_on() {
+  /* XXX read from environment variable? */
+  x11_display = XOpenDisplay(0);
+  if (!x11_display) {
+    fputs("Could not start X module!\n", stderr);
+    return;
+  }
+  fputs("X module on.\n", stderr);
+}
+
+/* disables the X module */
+void x_off() {
+  if (x11_display) {
+    XCloseDisplay(x11_display);
+    fputs("X module off.\n", stderr);
+  }
+}
+
+/* checks whether the X module is turned on */
+int x_is_on() {
+  return x11_display != 0;
+}
+
+XKeyEvent x_synthesize_ke(int pressed, KeySym keysym) {
+  XKeyEvent ret;
+  Window focused;
+  int revert;
+
+  /* who's in focus? */
+  XGetInputFocus(x11_display, &focused, &revert);
+
+  if (pressed) {
+    ret.type = KeyPress;
+  } else {
+    ret.type = KeyRelease;
+  }
+
+  ret.display = x11_display;
+  ret.root = XDefaultRootWindow(x11_display);
+  ret.window = focused;
+  ret.subwindow = None;
+  ret.time = CurrentTime;
+  ret.x = 1;
+  ret.y = 1;
+  ret.x_root = 1;
+  ret.y_root = 1;
+  ret.same_screen = True;
+
+  /* TODO: something clever */
+  ret.keycode = XKeysymToKeycode(x11_display, keysym);
+  ret.state = 0;
+
+  return ret;
+}
+
+/* configurable stuff */
+void all_on() {
+  x_on();
+}
+
+void all_off() {
+  x_off();
+}
+
+/* EVENT REACTIONS
+   --------------- */
+
+/* maximum number of buttons supported */
+#define NUM_BUTTONS 3
+
+#define RT_NOP	0		/* do nothing */
+#define RT_X	1		/* do something in X */
+
+#define RT_XKEY 0		/* emulate keyboard keys */
+
+typedef struct _reactor_x11 {
+  int type;
+  KeySym keysym;
+} reactor_x11;
+
+/* holds reaction information for particular thingdoers */
+typedef struct _reactor {
+  int type;
+  union _data {
+    reactor_x11 x11;
+  } data;
+} reactor;
+
+static reactor reactions[NUM_BUTTONS];
+
+void reactor_do_x11(reactor* self, int on) {
+  XKeyEvent event = x_synthesize_ke(on, self->data.x11.keysym);
+  printf("HORK %d.\n", on);
+  if (on) {
+  XSendEvent(event.display, event.window, True, KeyPressMask, (XEvent*)&event);
+  } else {
+    XSendEvent(event.display, event.window, True, KeyReleaseMask, (XEvent*)&event);
+  }
+  XFlush(x11_display);
+}
+
+void reactor_do(reactor* self, int on) {
+  switch (self->type) {
+  case RT_NOP: break;
+  case RT_X:
+    reactor_do_x11(self, on);
+    break;
+  default:
+    abort();
+  }
+}
+
+/* OUR STUFF
+   --------- */
 #define DEVICEPATH "/dev/usb/hiddev1"
 
 /* size of individual datablocks */
@@ -58,22 +187,48 @@ void print_button_banner(int buttons) {
 int main() {
   FILE* dev_input;		/* fd to read events from */
   datablock dblock;		/* block to store packets */
-  int button_states = 0;	/* current button states */
+
+  /* nop out all reactors */
+  memset((void*)&reactions, 0, sizeof(reactions));
+
+  /* TODO delegate this to config/ipc */
+  reactions[1].type		   = RT_X;
+  reactions[1].data.x11.type   = RT_XKEY;
+  reactions[1].data.x11.keysym = XK_Shift_L;
 
   /* header */
   printf("This is footpedald's proof of concept program.\n");
   printf("Not recommended for production use.\n");
 
+  /* turn on modules */
+  all_on();
+
   /* open and check for input */
   dev_input = fopen(DEVICEPATH, "rb");
   if (dev_input == NULL) {
     fputs("Could not open HID device.\n", stderr);
+    goto nohid;		  /* somebody saw this goto and died inside */
   }
 
   /* read user events */
+  int bmask;			/* known button mask */
   while (ferror(dev_input) == 0) {
     if (fread((void*)&dblock, DATABLOCK_SIZE, 1, dev_input)) {
-      print_button_banner(mask_from_datablock(&dblock));
+      int nmask;		/* next mask */
+      nmask = mask_from_datablock(&dblock);
+      /*print_button_banner(mask_from_datablock(&dblock));*/
+
+      if ((bmask & BUTTON_LEFT) != (nmask & BUTTON_LEFT)) {
+	reactor_do(&reactions[0], (nmask & BUTTON_LEFT));
+      }
+      if ((bmask & BUTTON_CENTER) != (nmask & BUTTON_CENTER)) {
+	reactor_do(&reactions[1], (nmask & BUTTON_CENTER));
+      }
+      if ((bmask & BUTTON_RIGHT) != (nmask & BUTTON_RIGHT)) {
+	reactor_do(&reactions[2], (nmask & BUTTON_RIGHT));
+      }
+
+      bmask = nmask;
     } else {
       fputs("Mutilated user event.\n", stderr);
     }
@@ -81,4 +236,8 @@ int main() {
 
   /* clean up after ourselves */
   fclose(dev_input);
+
+ nohid:
+  /* turn off modules */
+  all_off();
 }
