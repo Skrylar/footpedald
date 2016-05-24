@@ -5,6 +5,7 @@
 #include <X11/Xlib.h>
 #include <X11/keysym.h>
 #include <X11/keysymdef.h>
+#include <X11/extensions/XTest.h>
 
 /* X11
    --- */
@@ -36,38 +37,6 @@ void x_off() {
 /* checks whether the X module is turned on */
 int x_is_on() {
   return x11_display != 0;
-}
-
-XKeyEvent x_synthesize_ke(int pressed, KeySym keysym) {
-  XKeyEvent ret;
-  Window focused;
-  int revert;
-
-  /* who's in focus? */
-  XGetInputFocus(x11_display, &focused, &revert);
-
-  if (pressed) {
-    ret.type = KeyPress;
-  } else {
-    ret.type = KeyRelease;
-  }
-
-  ret.display = x11_display;
-  ret.root = XDefaultRootWindow(x11_display);
-  ret.window = focused;
-  ret.subwindow = None;
-  ret.time = CurrentTime;
-  ret.x = 1;
-  ret.y = 1;
-  ret.x_root = 1;
-  ret.y_root = 1;
-  ret.same_screen = True;
-
-  /* TODO: something clever */
-  ret.keycode = XKeysymToKeycode(x11_display, keysym);
-  ret.state = 0;
-
-  return ret;
 }
 
 /* configurable stuff */
@@ -106,13 +75,8 @@ typedef struct _reactor {
 static reactor reactions[NUM_BUTTONS];
 
 void reactor_do_x11(reactor* self, int on) {
-  XKeyEvent event = x_synthesize_ke(on, self->data.x11.keysym);
-  printf("HORK %d.\n", on);
-  if (on) {
-  XSendEvent(event.display, event.window, True, KeyPressMask, (XEvent*)&event);
-  } else {
-    XSendEvent(event.display, event.window, True, KeyReleaseMask, (XEvent*)&event);
-  }
+  /* XKeyEvent event = x_synthesize_ke(on, self->data.x11.keysym); */
+  XTestFakeKeyEvent(x11_display, XKeysymToKeycode(x11_display, self->data.x11.keysym), on, CurrentTime);
   XFlush(x11_display);
 }
 
@@ -192,9 +156,17 @@ int main() {
   memset((void*)&reactions, 0, sizeof(reactions));
 
   /* TODO delegate this to config/ipc */
-  reactions[1].type		   = RT_X;
+  reactions[0].type	       = RT_X;
+  reactions[0].data.x11.type   = RT_XKEY;
+  reactions[0].data.x11.keysym = XK_Control_L;
+
+  reactions[1].type	       = RT_X;
   reactions[1].data.x11.type   = RT_XKEY;
   reactions[1].data.x11.keysym = XK_Shift_L;
+
+  reactions[2].type	       = RT_X;
+  reactions[2].data.x11.type   = RT_XKEY;
+  reactions[2].data.x11.keysym = XK_Super_R;
 
   /* header */
   printf("This is footpedald's proof of concept program.\n");
