@@ -7,6 +7,8 @@
 #include <X11/keysymdef.h>
 #include <X11/extensions/XTest.h>
 
+#include "config.h"
+
 /* X11
    --- */
 /* Special thanks to Adam for his example code on sending X11 events.
@@ -93,7 +95,7 @@ void reactor_do(reactor* self, int on) {
 
 /* OUR STUFF
    --------- */
-#define DEVICEPATH "/dev/usb/hiddev1"
+static const char* FOOTPEDAL;
 
 /* size of individual datablocks */
 #define DATABLOCK_SIZE 24
@@ -108,6 +110,14 @@ typedef char datablock[DATABLOCK_SIZE];
 #define BUTTON_LEFT (1 << 0)
 #define BUTTON_CENTER (1 << 1)
 #define BUTTON_RIGHT (1 << 2)
+
+void init_config() {
+  FOOTPEDAL = fpd_get_env("FOOTPEDAL");
+  if (FOOTPEDAL == NULL) {
+    fprintf(stderr, "FOOTPEDAL env not set!\n");
+    exit(1);
+  }
+}
 
 int mask_from_datablock(datablock* dblock) {
   int ret = 0;
@@ -152,6 +162,8 @@ int main() {
   FILE* dev_input;		/* fd to read events from */
   datablock dblock;		/* block to store packets */
 
+  init_config();
+
   /* nop out all reactors */
   memset((void*)&reactions, 0, sizeof(reactions));
 
@@ -176,7 +188,7 @@ int main() {
   all_on();
 
   /* open and check for input */
-  dev_input = fopen(DEVICEPATH, "rb");
+  dev_input = fopen(FOOTPEDAL, "rb");
   if (dev_input == NULL) {
     fputs("Could not open HID device.\n", stderr);
     goto nohid;		  /* somebody saw this goto and died inside */
